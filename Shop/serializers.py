@@ -1,10 +1,14 @@
 from rest_framework import serializers
-from .models import Product , CartItem , Order , OrderItem
+from .models import Product , CartItem , Order , OrderItem , Category
 
 class ProductSerializer(serializers.ModelSerializer):
 
-    category = serializers.StringRelatedField()
-
+    category = serializers.SlugRelatedField(
+        many = True ,
+        slug_field = "name",
+        queryset = Category.objects.all()
+    )
+    stock = serializers.IntegerField(write_only = True)
     class Meta:
         model = Product
         fields = [
@@ -13,6 +17,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "price",
+            "stock",
             "image"
         ]
 
