@@ -1,11 +1,13 @@
-from django.shortcuts import render
+from django.shortcuts import render , get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.generics import ListCreateAPIView
-from rest_framework.permissions import AllowAny , IsAdminUser
+from rest_framework.response import Response
+from rest_framework.generics import ListCreateAPIView , RetrieveUpdateDestroyAPIView
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny , IsAdminUser , IsAuthenticated
 from rest_framework.filters import SearchFilter , OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from .serializers import ProductSerializer
-from .models import Product 
+from .models import Product , CartItem , Cart
 from .filters import PriceFilter
 
 # Create your views here.
@@ -34,3 +36,54 @@ class ProductAPIView(ListCreateAPIView):
             self.permission_classes = [IsAdminUser]
 
         return super().get_permissions()
+
+class ProductDetailAPIView(RetrieveUpdateDestroyAPIView):
+    serializer_class = ProductSerializer
+
+    def get_queryset(self):
+
+        if self.request.method == "GET":
+            return Product.objects.filter(stock__gt = 0
+                                    ).prefetch_related("category")
+
+        elif self.request.method in ("PUT" , "PATCH" , "DELETE"):
+            return Product.objects.prefetch_related("category")
+                                    
+    def get_permissions(self):
+        if self.request.method == "GET":
+            self.permission_classes = [AllowAny]
+
+        elif self.request.method in ("PUT" , "PATCH" , "DELETE"):
+            self.permission_classes = [IsAdminUser]
+
+        return super().get_permissions()
+
+class AddProductCartAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self , request , pk):
+        product = get_object_or_404(Product , id = pk)
+        cart = get_object_or_404(Cart , user = self.request.user)
+
+        if CartItem.objects.filter(user = self.request.user , product = product).exists():
+            cart_item = CartItem.objects.get(
+                user = self.request.user ,
+                product = product)
+            
+            cart_item.quantity += 1
+            cart_item.save()
+
+            return Response({
+            "message": "quantity increased by 1"
+            })
+
+        CartItem.objects.create(
+            user=self.request.user,
+            product=product,
+            cart=cart,
+            quantity=1
+        )
+
+        return Response({
+            "message": "product added to cart successfully"
+        })
