@@ -1,12 +1,13 @@
 from django.shortcuts import render , get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
-from rest_framework.generics import ListCreateAPIView , RetrieveUpdateDestroyAPIView
+from rest_framework import status
+from rest_framework.generics import ListCreateAPIView , RetrieveUpdateDestroyAPIView , ListAPIView
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny , IsAdminUser , IsAuthenticated
 from rest_framework.filters import SearchFilter , OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from .serializers import ProductSerializer
+from .serializers import ProductSerializer , CartItemSerializer
 from .models import Product , CartItem , Cart
 from .filters import PriceFilter
 
@@ -87,3 +88,40 @@ class AddProductCartAPIView(APIView):
         return Response({
             "message": "product added to cart successfully"
         })
+
+class RemoveProductCartAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self , request , pk):
+
+        product = get_object_or_404(Product , id = pk)     
+        cart_item_found = CartItem.objects.filter(user=self.request.user , product = product).exists()
+        
+        if cart_item_found:
+            cart_item = CartItem.objects.get(user=self.request.user , product = product)
+
+            if cart_item.quantity > 1 and cart_item:
+                cart_item.quantity -= 1
+                cart_item.save()
+                return Response({
+                            "message": "quantity decreased by 1"
+                            })
+
+            elif cart_item.quantity <= 1 and cart_item:
+                cart_item.delete()
+                return Response({
+                            "message": "product removed from cart successfully"
+                        })
+
+        else:
+            return Response({
+                "message":"product not in cart"
+            },status.HTTP_404_NOT_FOUND)
+
+
+class ProductCartAPIView(ListAPIView):
+    serializer_class = CartItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return CartItem.objects.filter(user = self.request.user).select_related("product")
