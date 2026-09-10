@@ -7,8 +7,8 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny , IsAdminUser , IsAuthenticated
 from rest_framework.filters import SearchFilter , OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from .serializers import ProductSerializer , CartItemSerializer
-from .models import Product , CartItem , Cart
+from .serializers import ProductSerializer , CartItemSerializer , OrderSerializer
+from .models import Product , CartItem , Cart , OrderItem , Order
 from .filters import PriceFilter
 
 # Create your views here.
@@ -125,3 +125,34 @@ class ProductCartAPIView(ListAPIView):
 
     def get_queryset(self):
         return CartItem.objects.filter(user = self.request.user).select_related("product")
+
+
+class CheckoutAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self,request):
+
+        cart_items = CartItem.objects.filter(user = self.request.user)
+        order = Order.objects.create(user = self.request.user)
+
+        for item in cart_items:
+            OrderItem.objects.create(
+                user = self.request.user,
+                product = item.product,
+                quantity = item.quantity,
+                price = item.product.price,
+                order = order
+            )
+
+        cart_items.delete()
+
+        return Response({
+            "message" : "checkout is done"
+        })
+
+class OrderHistoryAPIView(ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Order.objects.filter(user = self.request.user)
