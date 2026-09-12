@@ -10,6 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 from .serializers import ProductSerializer , CartItemSerializer , OrderSerializer
 from .models import Product , CartItem , Cart , OrderItem , Order
 from .filters import PriceFilter
+from django.db.models import F , Sum
 
 # Create your views here.
 
@@ -126,6 +127,20 @@ class ProductCartAPIView(ListAPIView):
     def get_queryset(self):
         return CartItem.objects.filter(user = self.request.user).select_related("product")
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+
+        total_cost = queryset.aggregate(
+            total_cost=Sum(F("product__price") * F("quantity"))
+        )["total_cost"]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        return Response({
+            "items": serializer.data,
+            "total_cost": total_cost or 0
+        })
+
 
 class CheckoutAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -133,22 +148,27 @@ class CheckoutAPIView(APIView):
     def post(self,request):
 
         cart_items = CartItem.objects.filter(user = self.request.user)
-        order = Order.objects.create(user = self.request.user)
+        if cart_items:
+            order = Order.objects.create(user = self.request.user)
 
-        for item in cart_items:
-            OrderItem.objects.create(
-                user = self.request.user,
-                product = item.product,
-                quantity = item.quantity,
-                price = item.product.price,
-                order = order
-            )
+            for item in cart_items:
+                OrderItem.objects.create(
+                    user = self.request.user,
+                    product = item.product,
+                    quantity = item.quantity,
+                    price = item.product.price,
+                    order = order
+                )
 
-        cart_items.delete()
+            cart_items.delete()
+
+            return Response({
+                "message" : "checkout is done"
+            })
 
         return Response({
-            "message" : "checkout is done"
-        })
+            "message" : "Cart is empty"
+                    },status = status.HTTP_400_BAD_REQUEST)
 
 class OrderHistoryAPIView(ListAPIView):
     serializer_class = OrderSerializer
